@@ -1,4 +1,6 @@
-﻿import streamlit as st
+﻿from pathlib import Path
+from pathlib import Path
+import streamlit as st
 import pandas as pd
 
 # ==========================================================
@@ -35,6 +37,7 @@ from core.parser.parser import PythonParser
 # ==========================================================
 
 from core.export.pdf_exporter import PDFExporter
+from core.export.excel_exporter import ExcelExporter
 from core.export.readme_generator import ReadmeGenerator
 
 # ==========================================================
@@ -73,6 +76,7 @@ complexity = ComplexityAnalyzer()
 security = SecurityAnalyzer()
 
 pdf_exporter = PDFExporter()
+excel_exporter = ExcelExporter()
 
 readme_generator = ReadmeGenerator()
 
@@ -357,6 +361,415 @@ def show_project_dashboard(project_folder):
     st.caption(
         "Enterprise Static Code Analysis Platform"
     )
+
+
+    # ======================================================
+    # PROJECT WORKFLOW / CODE EXPLANATION
+    # ======================================================
+
+    st.divider()
+
+    st.subheader("Project Workflow / Code Explanation")
+
+    st.caption(
+        "A structured explanation of the uploaded project based on "
+        "its analyzed files, Python structure, functions, classes, "
+        "imports, and generated project metrics."
+    )
+
+    # ------------------------------------------------------
+    # PROJECT SUMMARY
+    # ------------------------------------------------------
+
+    st.markdown("### Project Summary")
+
+    project_name = project_folder.name
+
+    python_files = [
+        analysis
+        for analysis in analyses
+        if getattr(analysis, "language", "").lower() == "python"
+    ]
+
+    total_functions = sum(
+        len(getattr(analysis, "functions", []))
+        for analysis in analyses
+    )
+
+    total_classes = sum(
+        len(getattr(analysis, "classes", []))
+        for analysis in analyses
+    )
+
+    total_imports = sum(
+        len(getattr(analysis, "imports", []))
+        for analysis in analyses
+    )
+
+    total_lines = sum(
+        getattr(analysis, "total_lines", 0)
+        for analysis in analyses
+    )
+
+    st.write(
+        f"**{project_name}** contains "
+        f"**{len(analyses)} analyzed source files**, "
+        f"with approximately **{total_lines} lines**, "
+        f"**{total_functions} functions**, "
+        f"**{total_classes} classes**, and "
+        f"**{total_imports} imports**."
+    )
+
+    if python_files:
+
+        st.write(
+            "Deep structural analysis was performed on the detected "
+            "Python source files using AST-based parsing."
+        )
+
+    else:
+
+        st.info(
+            "Deep structural analysis is primarily supported for Python code."
+        )
+
+    # ------------------------------------------------------
+    # MAIN WORKFLOW
+    # ------------------------------------------------------
+
+    st.markdown("### Main Workflow")
+
+    workflow = [
+        "Project files are uploaded and scanned.",
+        "Source files are detected and parsed into structured representations.",
+        "Functions, classes, imports, lines, and other source-level structures are extracted.",
+        "Complexity, security, code smells, duplicate code, dead code, TODOs, and architecture are analyzed.",
+        "The individual results are aggregated into project-level quality and security scores.",
+        "The final results are displayed through the CodeInsight AI dashboard and can be exported into reports.",
+    ]
+
+    for step_number, step in enumerate(workflow, start=1):
+
+        st.markdown(
+            f"**{step_number}.** {step}"
+        )
+
+    # ------------------------------------------------------
+    # IMPORTANT FILES
+    # ------------------------------------------------------
+
+    st.markdown("### Important Files & Their Roles")
+
+    file_rows = []
+
+    for analysis in analyses[:25]:
+
+        file_name = getattr(
+            analysis,
+            "file_name",
+            None,
+        )
+
+        if not file_name:
+
+            file_name = getattr(
+                analysis,
+                "name",
+                None,
+            )
+
+        if not file_name:
+
+            file_name = getattr(
+                analysis,
+                "path",
+                "Unknown file",
+            )
+
+        if isinstance(file_name, Path):
+
+            file_name = file_name.name
+
+        file_name = str(file_name)
+
+        file_functions = getattr(
+            analysis,
+            "functions",
+            [],
+        )
+
+        file_classes = getattr(
+            analysis,
+            "classes",
+            [],
+        )
+
+        file_imports = getattr(
+            analysis,
+            "imports",
+            [],
+        )
+
+        if file_classes:
+
+            role = "Defines classes and object-oriented project logic."
+
+        elif file_functions:
+
+            role = "Contains functions and executable application logic."
+
+        elif file_imports:
+
+            role = "Provides imports/dependencies used by the project."
+
+        else:
+
+            role = "Source/configuration file identified during project scanning."
+
+        file_rows.append(
+            {
+                "File": file_name,
+                "Role": role,
+                "Functions": len(file_functions),
+                "Classes": len(file_classes),
+                "Imports": len(file_imports),
+            }
+        )
+
+    if file_rows:
+
+        st.dataframe(
+            pd.DataFrame(file_rows),
+            hide_index=True,
+            use_container_width=True,
+        )
+
+    else:
+
+        st.info(
+            "No structured source files were available for file-role analysis."
+        )
+
+    # ------------------------------------------------------
+    # IMPORTANT FUNCTIONS / CLASSES
+    # ------------------------------------------------------
+
+    st.markdown("### Important Functions / Classes")
+
+    function_rows = []
+    class_rows = []
+
+    for analysis in analyses:
+
+        file_name = getattr(
+            analysis,
+            "file_name",
+            None,
+        )
+
+        if not file_name:
+
+            file_name = getattr(
+                analysis,
+                "name",
+                "Unknown file",
+            )
+
+        if isinstance(file_name, Path):
+
+            file_name = file_name.name
+
+        for function in getattr(
+            analysis,
+            "functions",
+            [],
+        ):
+
+            function_rows.append(
+                {
+                    "File": str(file_name),
+                    "Function": getattr(
+                        function,
+                        "name",
+                        "Unknown",
+                    ),
+                    "Line": getattr(
+                        function,
+                        "line_number",
+                        getattr(
+                            function,
+                            "lineno",
+                            "-",
+                        ),
+                    ),
+                }
+            )
+
+        for cls in getattr(
+            analysis,
+            "classes",
+            [],
+        ):
+
+            class_rows.append(
+                {
+                    "File": str(file_name),
+                    "Class": getattr(
+                        cls,
+                        "name",
+                        "Unknown",
+                    ),
+                    "Line": getattr(
+                        cls,
+                        "line_number",
+                        getattr(
+                            cls,
+                            "lineno",
+                            "-",
+                        ),
+                    ),
+                }
+            )
+
+    with st.expander(
+        f"Functions ({len(function_rows)})",
+        expanded=False,
+    ):
+
+        if function_rows:
+
+            st.dataframe(
+                pd.DataFrame(function_rows),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+        else:
+
+            st.info(
+                "No functions detected."
+            )
+
+    with st.expander(
+        f"Classes ({len(class_rows)})",
+        expanded=False,
+    ):
+
+        if class_rows:
+
+            st.dataframe(
+                pd.DataFrame(class_rows),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+        else:
+
+            st.info(
+                "No classes detected."
+            )
+
+    # ------------------------------------------------------
+    # DATA FLOW
+    # ------------------------------------------------------
+
+    st.markdown("### Data Flow")
+
+    st.code(
+        """Uploaded Project
+        ↓
+Project Scanner
+        ↓
+Source File Detection
+        ↓
+Python AST Parsing
+        ↓
+Functions / Classes / Imports Extraction
+        ↓
+Complexity + Security + Code Smell Analysis
+        ↓
+Duplicate / Dead Code / TODO / Architecture Analysis
+        ↓
+Project-Level Quality & Security Scores
+        ↓
+Dashboard / AI Review / Reports""",
+        language="text",
+    )
+
+    # ------------------------------------------------------
+    # FINAL OUTPUT
+    # ------------------------------------------------------
+
+    st.markdown("### Final Output")
+
+    output_items = [
+        f"Project: {project_name}",
+        f"Analyzed files: {len(analyses)}",
+        f"Functions detected: {total_functions}",
+        f"Classes detected: {total_classes}",
+        f"Average complexity: {avg_complexity}",
+        f"Security score: {security_score}/100",
+        f"Overall quality score: {scores.get('overall', 0)}/100",
+        f"Security issues: {total_security_issues}",
+        f"Code smell / quality findings: {len(duplicates)} duplicate findings plus additional static-analysis results",
+    ]
+
+    for item in output_items:
+
+        st.markdown(
+            f"- {item}"
+        )
+
+    # ------------------------------------------------------
+    # AI EXPLANATION
+    # ------------------------------------------------------
+
+    st.markdown("### AI Project Explanation")
+
+    st.caption(
+        "Use Gemini-powered review to generate a natural-language explanation "
+        "of what the uploaded project does and how its main components work."
+    )
+
+    if st.button(
+        "Generate Project Workflow Explanation",
+        use_container_width=True,
+        key="generate_project_workflow_explanation",
+    ):
+
+        with st.spinner(
+            "Gemini is generating the project explanation..."
+        ):
+
+            try:
+
+                ai_explanation = reviewer.review(
+                    project_folder.name,
+                    analyses,
+                )
+
+                if ai_explanation:
+
+                    with st.expander(
+                        "View AI Project Explanation",
+                        expanded=True,
+                    ):
+
+                        st.markdown(
+                            ai_explanation
+                        )
+
+                else:
+
+                    st.warning(
+                        "Gemini did not return an explanation."
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    f"AI Project Explanation unavailable: {e}"
+                )
 
     m1, m2, m3, m4 = st.columns(4)
 
@@ -1181,6 +1594,41 @@ def show_project_dashboard(project_folder):
     st.divider()
 
     # ======================================================
+    # EXCEL EXPORT
+    # ======================================================
+
+    st.subheader("📊 Excel Report")
+
+    try:
+
+        excel_data = excel_exporter.generate(
+            project_name=project_folder.name,
+            metrics=stats,
+            quality=scores,
+            security_score=security_score,
+            libraries=libraries,
+            duplicate_summary=duplicate_summary,
+            todo_summary=todos["summary"],
+        )
+
+        st.download_button(
+            "Download Excel Report",
+            data=excel_data,
+            file_name=f"{project_folder.name}_CodeInsight_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="download_excel_report",
+        )
+
+    except Exception as e:
+
+        st.error(
+            f"Excel export unavailable: {e}"
+        )
+
+    st.divider()
+
+    # ======================================================
     # PDF EXPORT
     # ======================================================
 
@@ -1212,7 +1660,7 @@ def show_project_dashboard(project_folder):
 
         st.download_button(
 
-            "“¥ Download Professional PDF",
+            "Download Professional PDF",
 
             data=pdf,
 
@@ -1454,6 +1902,9 @@ def show_project_dashboard(project_folder):
         "🚀 CodeInsight AI v3.0 | Enterprise Static Code Analysis Platform | Built with Python • Streamlit • AST • Radon"
 
     )
+
+
+
 
 
 

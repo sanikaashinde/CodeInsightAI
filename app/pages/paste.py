@@ -221,13 +221,29 @@ def show_paste():
         ),
     )
 
+    if "paste_analysis_done" not in st.session_state:
+        st.session_state.paste_analysis_done = False
+
     analyze_button = st.button(
         "Analyze Code",
         type="primary",
         use_container_width=True,
     )
 
-    if not analyze_button:
+    if analyze_button:
+
+        if not code.strip():
+
+            st.warning(
+                "Please paste some Python code first."
+            )
+
+            return
+
+        st.session_state.paste_analysis_done = True
+
+    elif not st.session_state.paste_analysis_done:
+
         return
 
     if not code.strip():
@@ -367,16 +383,18 @@ def show_paste():
         # HISTORY
         # =================================================
 
-        add_analysis_history(
-            analysis_type="Paste Code",
-            name="Pasted Python Code",
-            quality_score=quality,
-            security_score=security_score,
-            complexity=complexity["average"],
-            functions=total_functions,
-            classes=len(classes),
-            code_smells=len(smells),
-        )
+        if analyze_button:
+
+            add_analysis_history(
+                analysis_type="Paste Code",
+                name="Pasted Python Code",
+                quality_score=quality,
+                security_score=security_score,
+                complexity=complexity["average"],
+                functions=total_functions,
+                classes=len(classes),
+                code_smells=len(smells),
+            )
 
         # =================================================
         # SUCCESS
@@ -906,22 +924,35 @@ def show_paste():
                 "Generate AI Summary",
                 key="paste_ai_summary",
                 use_container_width=True,
+                type="primary",
             ):
 
                 try:
 
-                    from core.ai.summarizer import summarizer
+                    from core.llm.llm_client import GeminiClient
 
-                    with st.spinner(
-                        "Gemini is analyzing the code..."
-                    ):
+                    gemini = GeminiClient()
 
-                        summary = summarizer.summarize(
-                            code,
-                            "Python",
+                    if not gemini.is_available():
+
+                        st.error(
+                            "Gemini AI is not configured. "
+                            "Add GEMINI_API_KEY to your .env file "
+                            "or Streamlit Secrets."
                         )
 
-                    st.markdown(summary)
+                    else:
+
+                        with st.spinner(
+                            "Gemini is analyzing the code..."
+                        ):
+
+                            summary = gemini.summarize_code(
+                                code,
+                                "Python",
+                            )
+
+                        st.markdown(summary)
 
                 except Exception as e:
 
@@ -950,3 +981,6 @@ def show_paste():
             except Exception:
 
                 pass
+
+
+

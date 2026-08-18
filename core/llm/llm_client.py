@@ -5,8 +5,10 @@ import os
 import time
 from typing import Optional
 
+import streamlit as st
 from dotenv import load_dotenv
 from google import genai
+
 
 load_dotenv()
 
@@ -15,24 +17,58 @@ logger = logging.getLogger(__name__)
 
 class GeminiClient:
 
+    # Prefer the current fast Gemini model, with fallback models.
     MODELS = [
+        "gemini-3.6-flash",
         "gemini-3.5-flash",
-        "gemini-3.1-flash-lite",
         "gemini-2.0-flash",
     ]
 
     def __init__(self):
 
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = None
+
+        # -------------------------------------------------
+        # Streamlit Cloud / Streamlit secrets
+        # -------------------------------------------------
+
+        try:
+            api_key = st.secrets.get("GEMINI_API_KEY")
+        except Exception:
+            api_key = None
+
+        # -------------------------------------------------
+        # Environment / .env fallback
+        # -------------------------------------------------
+
+        if not api_key:
+            api_key = os.getenv("GEMINI_API_KEY")
 
         self.client = None
 
         if api_key:
-            self.client = genai.Client(api_key=api_key)
+            try:
+                self.client = genai.Client(
+                    api_key=api_key
+                )
+
+            except Exception as e:
+                logger.exception(
+                    "Failed to initialize Gemini client: %s",
+                    e,
+                )
+
+                self.client = None
+
         else:
             logger.warning(
-                "GEMINI_API_KEY not found. Gemini AI features are disabled."
+                "GEMINI_API_KEY not found. "
+                "Gemini AI features are disabled."
             )
+
+    def is_available(self) -> bool:
+
+        return self.client is not None
 
     def _generate_with_model(
         self,
@@ -40,7 +76,10 @@ class GeminiClient:
         prompt: str,
     ) -> Optional[str]:
 
-        retries = 3
+        if self.client is None:
+            return None
+
+        retries = 2
 
         for attempt in range(retries):
 
@@ -51,34 +90,49 @@ class GeminiClient:
                     contents=prompt,
                 )
 
-                if hasattr(response, "text") and response.text:
-                    return response.text.strip()
+                if response is not None:
 
-                return "No response generated."
+                    text = getattr(
+                        response,
+                        "text",
+                        None,
+                    )
+
+                    if text:
+                        return text.strip()
+
+                return None
 
             except Exception as e:
 
                 error = str(e)
 
-                logger.warning(f"{model} failed: {error}")
+                logger.warning(
+                    "%s failed: %s",
+                    model,
+                    error,
+                )
 
-                if "404" in error:
-                    break
-
-                if "503" in error:
+                # Retry temporary server/rate-limit failures.
+                if (
+                    "503" in error
+                    or "429" in error
+                    or "temporarily" in error.lower()
+                ):
 
                     if attempt < retries - 1:
+
                         wait = 2 ** attempt
-                        logger.info(f"Retrying in {wait}s...")
+
                         time.sleep(wait)
+
                         continue
 
-                    break
+                # Model not available.
+                if "404" in error:
+                    return None
 
-                if "429" in error:
-                    break
-
-                break
+                return None
 
         return None
 
@@ -89,32 +143,42 @@ class GeminiClient:
     ) -> str:
 
         if self.client is None:
+
             return (
-                "Gemini AI features are currently unavailable.\n\n"
-                "Please configure GEMINI_API_KEY in your .env file "
-                "to enable AI-powered features."
+                "Gemini AI is not configured.\n\n"
+                "Please add GEMINI_API_KEY to Streamlit Secrets "
+                "or your local .env file."
             )
 
+        final_prompt = prompt
+
         if system_prompt:
-            prompt = f"{system_prompt}\n\n{prompt}"
+
+            final_prompt = (
+                f"{system_prompt}\n\n"
+                f"{prompt}"
+            )
 
         for model in self.MODELS:
 
             result = self._generate_with_model(
                 model=model,
-                prompt=prompt,
+                prompt=final_prompt,
             )
 
             if result:
-                logger.info(f"Using model: {model}")
+
+                logger.info(
+                    "Gemini response generated using %s",
+                    model,
+                )
+
                 return result
 
         return (
-            "Unable to generate response.\n\n"
-            "Possible reasons:\n"
-            "- Gemini servers are busy (503)\n"
-            "- API quota exceeded (429)\n"
-            "- Model unavailable\n"
+            "Gemini could not generate a response.\n\n"
+            "Please verify your API key, model availability, "
+            "quota, and network connection."
         )
 
     def summarize_code(
@@ -124,19 +188,27 @@ class GeminiClient:
     ) -> str:
 
         prompt = f"""
+You are an expert software engineer.
+
 Analyze the following {language} code.
 
-Explain:
+Provide a clear natural-language explanation containing:
 
-1. Purpose
-2. Classes
-3. Functions
-4. Workflow
-5. Time Complexity
-6. Space Complexity
-7. Improvements
+1. Project/code purpose
+2. What the code is doing
+3. Main workflow
+4. Important functions and classes
+5. Inputs
+6. Important transformations or processing
+7. Outputs
+8. Security or quality concerns
+9. Complexity considerations
+10. Recommended improvements
 
-Code:
+Make the explanation understandable to a developer reviewing
+the project for the first time.
+
+CODE:
 
 {code}
 """
@@ -149,18 +221,19 @@ Code:
     ) -> str:
 
         prompt = f"""
-Explain this function.
+Explain this function clearly.
 
 Include:
 
 - Purpose
 - Parameters
-- Return Value
-- Internal Workflow
-- Time Complexity
-- Possible Improvements
+- Return value
+- Internal workflow
+- Important conditions or logic
+- Time complexity
+- Possible improvements
 
-Function:
+FUNCTION:
 
 {function_code}
 """
@@ -173,18 +246,21 @@ Function:
     ) -> str:
 
         prompt = f"""
-Review the following code.
+Review the following code as a senior software engineer.
 
-Mention:
+Provide:
 
-- Bugs
-- Security Issues
-- Performance Problems
-- Code Smells
-- Best Practices
-- Refactoring Suggestions
+- Purpose and behavior
+- Bugs or correctness risks
+- Security issues
+- Performance problems
+- Code smells
+- Maintainability concerns
+- Best practices
+- Refactoring suggestions
+- Final assessment
 
-Code:
+CODE:
 
 {code}
 """
