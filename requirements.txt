@@ -53,3 +53,4 @@ uvicorn==0.51.0
 watchdog==6.0.0
 websockets==16.1
 openpyxl==3.1.5
+google-genai
