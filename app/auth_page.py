@@ -182,8 +182,7 @@ def show_auth_page():
                         st.session_state.authenticated = True
                         st.session_state.user = user
 
-                        if remember:
-                            st.session_state.remember_me = True
+                        
 
                         st.rerun()
 
@@ -368,3 +367,6 @@ def show_auth_page():
             </div>
             """
         )
+
+
+
