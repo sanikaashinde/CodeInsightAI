@@ -122,7 +122,7 @@ def show_upload():
             with st.expander(file.name):
 
                 if language != "Python":
-                    st.info(f"{language} support coming soon.")
+                    st.info(f"Skipped from deep analysis: {file.name} ({language}). Deep static analysis is currently focused on Python projects.")
                     continue
 
                 try:
@@ -491,6 +491,7 @@ def show_upload():
                     )
 
     st.success(f"Total files analyzed: {total_files}")
+
 
 
 
