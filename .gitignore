@@ -11,7 +11,6 @@ env/
 
 *.db
 *.sqlite
-*.sqlite3
 
 .env
 .env.*
@@ -23,3 +22,5 @@ uploads/*
 *.zip
 
 .streamlit/secrets.toml
+
+*_backup*
